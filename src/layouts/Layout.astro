@@ -1,0 +1,43 @@
+---
+import '../styles/global.css';
+import {categories,tools} from '../data/tools.mjs';
+const {title='百宝匣', titleEn='HandyBox', tool=null}=Astro.props;
+const base=import.meta.env.BASE_URL.replace(/\/$/,'');
+---
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{title} · HandyBox</title>
+  <meta name="description" content="百宝匣 HandyBox：30 个本地运行的开发、图片、文本与文件工具。无需注册，中英文切换。"/>
+  <meta name="color-scheme" content="light dark"/>
+  <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`}/>
+  <script is:inline>try{const t=JSON.parse(localStorage.getItem('handybox-theme')||'"system"');document.documentElement.dataset.theme=t==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):t;document.documentElement.lang=JSON.parse(localStorage.getItem('handybox-language')||'"zh"')==='en'?'en':'zh-CN';}catch{}</script>
+</head>
+<body data-base={base} data-tool-id={tool?.id||''} data-page={tool?'tool':'home'} data-page-title-zh={title} data-page-title-en={titleEn}>
+  <a href="#main" class="skip-link" data-zh="跳到主要内容" data-en="Skip to content">跳到主要内容</a>
+  <header class="site-header">
+    <a class="brand" href={`${base}/`} aria-label="HandyBox 百宝匣"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="m7 9 9-4 9 4v14l-9 4-9-4Z" stroke="currentColor" stroke-width="2"/><path d="m7 9 9 4 9-4M16 13v14M11.5 7l9 4" stroke="currentColor" stroke-width="2"/></svg></span><span>HandyBox<span class="brand-caption" data-zh="百宝匣" data-en="Everyday tools">百宝匣</span></span></a>
+    <div class="header-actions">
+      {tool&&<a class="header-search" href={`${base}/?focus=search`}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><span data-zh="搜索工具" data-en="Find a tool">搜索工具</span><kbd>⌘ K</kbd></a>}
+      <button id="language-toggle" class="quiet-button" aria-label="Switch language">EN</button>
+      <label class="theme-control"><span class="sr-only" data-zh="界面主题" data-en="Color theme">界面主题</span><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg><select id="theme-select"><option value="system" data-zh="跟随系统" data-en="System">跟随系统</option><option value="light" data-zh="浅色" data-en="Light">浅色</option><option value="dark" data-zh="深色" data-en="Dark">深色</option></select></label>
+    </div>
+  </header>
+  <div class="app-layout">
+    <aside class="sidebar" aria-label="工具分类">
+      <nav class="category-nav" aria-label="Categories">
+        <a href={`${base}/`} data-category-link="all" class:list={['nav-item',{'active':!tool}]}><span class="nav-symbol">▦</span><span data-zh="全部工具" data-en="All tools">全部工具</span><span class="nav-count">30</span></a>
+        <a href={`${base}/?view=favorites`} data-category-link="favorites" class="nav-item"><span class="nav-symbol">☆</span><span data-zh="我的收藏" data-en="Favorites">我的收藏</span><span class="nav-count" id="favorites-count">0</span></a>
+        <span class="nav-heading" data-zh="工具分类" data-en="Categories">工具分类</span>
+        {categories.map(c=><a href={`${base}/?category=${c.id}`} data-category-link={c.id} class:list={['nav-item',{'active':tool?.category===c.id}]}><span class="nav-symbol">{c.icon}</span><span data-zh={c.zh} data-en={c.en}>{c.zh}</span><span class="nav-count">{tools.filter(t=>t.category===c.id).length}</span></a>)}
+      </nav>
+      <div class="sidebar-note"><span class="local-dot"></span><strong data-zh="在你的浏览器里完成" data-en="Made to stay local">在你的浏览器里完成</strong><p data-zh="文本和文件留在本机，无需注册。" data-en="Your text and files stay on your device. No account needed.">文本和文件留在本机，无需注册。</p></div>
+    </aside>
+    <main id="main" tabindex="-1"><slot/></main>
+  </div>
+  <footer class="site-footer"><span data-zh="百宝匣，让日常简单一点。" data-en="HandyBox. A little less everyday friction.">百宝匣，让日常简单一点。</span><button id="reset-preferences" class="text-button" data-zh="清除本地偏好" data-en="Reset preferences">清除本地偏好</button><a href="https://github.com/jockiepeng/handybox" target="_blank" rel="noreferrer">GitHub</a><a href="https://github.com/jockiepeng/handybox/issues" target="_blank" rel="noreferrer" data-zh="反馈" data-en="Feedback">反馈</a></footer>
+  <div id="global-status" class="sr-only" role="status" aria-live="polite"></div>
+  <script>import '../scripts/site.mjs';</script>
+</body>
+</html>

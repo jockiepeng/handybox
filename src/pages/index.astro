@@ -1,0 +1,14 @@
+---
+import Layout from '../layouts/Layout.astro';
+import ToolCard from '../components/ToolCard.astro';
+import {tools,categories} from '../data/tools.mjs';
+---
+<Layout title="百宝匣" titleEn="HandyBox">
+  <section class="home-intro"><h1 data-zh="你的日常工具箱" data-en="A tool for the little things.">你的日常工具箱</h1><p data-zh="从一段代码到一张图片，找到顺手的工具，即刻开始。" data-en="From a snippet of code to an image. Find what you need and get on with your day.">从一段代码到一张图片，找到顺手的工具，即刻开始。</p></section>
+  <div class="search-box"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="tool-search" type="search" autocomplete="off" placeholder="搜索工具，例如 JSON、图片压缩、Unicode" data-placeholder-zh="搜索工具，例如 JSON、图片压缩、Unicode" data-placeholder-en="Find a tool, e.g. JSON, image compression, Unicode" aria-label="搜索工具" data-label-zh="搜索工具" data-label-en="Search tools"/><kbd class="search-shortcut">Ctrl K</kbd></div>
+  <div class="catalog-toolbar"><p id="result-count" aria-live="polite"></p><button id="clear-filters" class="text-button" data-zh="清除筛选" data-en="Clear filters" hidden>清除筛选</button></div>
+  <section id="recent-section" class="tool-section" hidden><div class="section-heading"><h2 data-zh="最近使用" data-en="Recently used">最近使用</h2><button id="clear-recent" class="text-button" data-zh="清除记录" data-en="Clear history">清除记录</button></div><div class="tool-grid recent-grid">{tools.map(t=><ToolCard tool={t} compact/>)}</div></section>
+  <div id="tool-catalog">{categories.map(c=><section class="tool-section" data-section={c.id}><div class="section-heading"><h2 data-zh={c.zh} data-en={c.en}>{c.zh}</h2><span class="section-count">{tools.filter(t=>t.category===c.id).length}</span></div><div class="tool-grid">{tools.filter(t=>t.category===c.id).map(t=><ToolCard tool={t}/>)}</div></section>)}</div>
+  <div id="empty-state" class="empty-state" hidden><span class="empty-icon">⌕</span><h2 data-zh="这里还没有工具" data-en="No tools here yet">这里还没有工具</h2><p data-zh="试试其他关键词，或点击工具旁的星标加入收藏。" data-en="Try a different search, or star a tool to add it to your favorites.">试试其他关键词，或点击工具旁的星标加入收藏。</p></div>
+  <noscript><p class="notice">工具目录可以直接浏览。运行工具、搜索和切换语言需要启用 JavaScript。 / Enable JavaScript to run tools and search.</p></noscript>
+</Layout>

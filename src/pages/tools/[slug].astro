@@ -1,0 +1,19 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import ToolCard from '../../components/ToolCard.astro';
+import ToolPrinciples from '../../components/ToolPrinciples.astro';
+import {tools} from '../../data/tools.mjs';
+export function getStaticPaths(){return tools.map(tool=>({params:{slug:tool.slug},props:{tool}}));}
+const {tool}=Astro.props;
+const base=import.meta.env.BASE_URL.replace(/\/$/,'');
+const related=tools.filter(t=>t.category===tool.category&&t.id!==tool.id).slice(0,3);
+---
+<Layout title={tool.zh} titleEn={tool.en} tool={tool}>
+  <a class="back-link" href={`${base}/`}><span aria-hidden="true">‹</span><span data-zh="全部工具" data-en="All tools">全部工具</span></a>
+  <div class="tool-heading"><span class={`tool-icon large ${tool.category}`} aria-hidden="true">{tool.icon}</span><div class="tool-heading-copy"><h1 data-zh={tool.zh} data-en={tool.en}>{tool.zh}</h1><p data-zh={tool.descriptionZh} data-en={tool.descriptionEn}>{tool.descriptionZh}</p></div><div class="tool-heading-actions"><button class="favorite-button detail-favorite" data-favorite={tool.id} aria-pressed="false" aria-label="收藏" data-label-zh="收藏工具" data-label-en="Favorite tool"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m12 3 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3L12 17.3 6.4 20.3l1.1-6.3L3 9.6l6.2-.9Z"/></svg></button><ToolPrinciples tool={tool}/></div></div>
+  <div class="workbench" id="workbench" data-tool={tool.id} aria-busy="true"><p class="loading-message" data-zh="正在准备工具…" data-en="Getting your tool ready…">正在准备工具…</p></div>
+  <noscript><p class="notice">请启用 JavaScript 运行此工具。 / Enable JavaScript to use this tool.</p></noscript>
+  <p class="privacy-note"><span class="local-dot"></span><span data-zh="内容仅在本机处理。刷新页面会清除输入和结果。" data-en="Processed on your device. Reloading clears your input and results.">内容仅在本机处理。刷新页面会清除输入和结果。</span></p>
+  <section class="tool-section related-tools"><div class="section-heading"><h2 data-zh="你可能还需要" data-en="You might also need">你可能还需要</h2></div><div class="tool-grid">{related.map(t=><ToolCard tool={t}/>)}</div></section>
+  <script>import '../../scripts/tool.mjs';</script>
+</Layout>

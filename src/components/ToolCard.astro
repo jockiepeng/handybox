@@ -1,0 +1,11 @@
+---
+const {tool,compact=false}=Astro.props;
+const base=import.meta.env.BASE_URL.replace(/\/$/,'');
+---
+<article class:list={['tool-card',{'compact':compact}]} data-card data-id={tool.id} data-category={tool.category}>
+  <a href={`${base}/tools/${tool.slug}/`} class="card-link">
+    <span class={`tool-icon ${tool.category}`} aria-hidden="true">{tool.icon}</span>
+    <div class="card-copy"><h3 data-zh={tool.zh} data-en={tool.en}>{tool.zh}</h3><p data-zh={tool.descriptionZh} data-en={tool.descriptionEn}>{tool.descriptionZh}</p></div>
+  </a>
+  <button class="favorite-button" data-favorite={tool.id} aria-pressed="false" data-label-zh={`收藏${tool.zh}`} data-label-en={`Favorite ${tool.en}`} aria-label={`收藏${tool.zh}`}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m12 3 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3L12 17.3 6.4 20.3l1.1-6.3L3 9.6l6.2-.9Z"/></svg></button>
+</article>

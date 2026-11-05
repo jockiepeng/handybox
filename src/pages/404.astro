@@ -1,0 +1,5 @@
+---
+import Layout from '../layouts/Layout.astro';
+const base=import.meta.env.BASE_URL.replace(/\/$/,'');
+---
+<Layout title="页面未找到" titleEn="Page not found"><section class="not-found"><span class="error-code">404</span><h1 data-zh="这个页面不在工具箱里" data-en="This page isn't in the toolbox.">这个页面不在工具箱里</h1><p data-zh="地址可能有误，回到首页找找吧。" data-en="The address may be incorrect. Find your tool on the home page.">地址可能有误，回到首页找找吧。</p><a class="primary-button" href={`${base}/`} data-zh="回到工具箱" data-en="Back to the toolbox">回到工具箱</a></section></Layout>
