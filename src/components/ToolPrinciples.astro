@@ -2,8 +2,14 @@
 import {principles} from '../data/principles.mjs';
 const {tool}=Astro.props;
 const content=principles[tool.id];
-if(!content)throw new Error(`Missing implementation explanation for ${tool.id}`);
+if(!content?.details?.length||!content.example)throw new Error(`Missing technical explanation for ${tool.id}`);
 const title={zh:`${tool.zh}的实现原理`,en:`How ${tool.en} works`};
+const chapters=[
+  {id:'principle-process-heading',zh:'处理流程',en:'Process'},
+  {id:'principle-details-heading',zh:'技术拆解',en:'Technical details'},
+  {id:'principle-example-heading',zh:'完整示例',en:'Worked example'},
+  {id:'principle-limits-heading',zh:'边界与限制',en:'Limits'},
+];
 ---
 <button type="button" id="principles-open" class="principles-trigger" aria-haspopup="dialog" aria-controls="principles-dialog" aria-expanded="false">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></svg>
@@ -16,16 +22,35 @@ const title={zh:`${tool.zh}的实现原理`,en:`How ${tool.en} works`};
   </div>
   <div class="principles-body">
     <p id="principles-summary" class="principle-summary" data-zh={content.summary.zh} data-en={content.summary.en}>{content.summary.zh}</p>
+    <nav class="principles-chapters" aria-label="说明章节" data-label-zh="说明章节" data-label-en="Explanation chapters">
+      {chapters.map(chapter=><button type="button" data-principle-jump={chapter.id} data-zh={chapter.zh} data-en={chapter.en}>{chapter.zh}</button>)}
+    </nav>
     <section aria-labelledby="principle-process-heading">
-      <h3 id="principle-process-heading" data-zh="处理流程" data-en="Processing steps">处理流程</h3>
+      <h3 id="principle-process-heading" tabindex="-1" data-zh="处理流程" data-en="Processing steps">处理流程</h3>
       <ol class="principle-steps">{content.steps.map(step=><li data-zh={step.zh} data-en={step.en}>{step.zh}</li>)}</ol>
     </section>
     <section aria-labelledby="principle-implementation-heading">
       <h3 id="principle-implementation-heading" data-zh="核心实现" data-en="Under the hood">核心实现</h3>
       <p class="principle-implementation" data-zh={content.implementation.zh} data-en={content.implementation.en}>{content.implementation.zh}</p>
     </section>
+    <section aria-labelledby="principle-details-heading">
+      <h3 id="principle-details-heading" tabindex="-1" data-zh="技术拆解" data-en="Technical details">技术拆解</h3>
+      {content.details.map(detail=><div class="principle-detail">
+        <h4 data-zh={detail.title.zh} data-en={detail.title.en}>{detail.title.zh}</h4>
+        {detail.paragraphs.map(paragraph=><p data-zh={paragraph.zh} data-en={paragraph.en}>{paragraph.zh}</p>)}
+        {detail.code&&<pre class="principle-code"><code data-zh={detail.code.zh} data-en={detail.code.en}>{detail.code.zh}</code></pre>}
+      </div>)}
+    </section>
+    <section class="principle-example" aria-labelledby="principle-example-heading">
+      <h3 id="principle-example-heading" tabindex="-1" data-zh="完整示例" data-en="Worked example">完整示例</h3>
+      <h4 data-zh="输入与选项" data-en="Input and options">输入与选项</h4>
+      <pre class="principle-code"><code class="principle-example-input" data-zh={content.example.input.zh} data-en={content.example.input.en}>{content.example.input.zh}</code></pre>
+      <h4 data-zh="输出与结果" data-en="Output and result">输出与结果</h4>
+      <pre class="principle-code"><code class="principle-example-output" data-zh={content.example.output.zh} data-en={content.example.output.en}>{content.example.output.zh}</code></pre>
+      <p class="principle-example-explanation" data-zh={content.example.explanation.zh} data-en={content.example.explanation.en}>{content.example.explanation.zh}</p>
+    </section>
     <section aria-labelledby="principle-limits-heading">
-      <h3 id="principle-limits-heading" data-zh="注意事项" data-en="Keep in mind">注意事项</h3>
+      <h3 id="principle-limits-heading" tabindex="-1" data-zh="边界与限制" data-en="Limits and tradeoffs">边界与限制</h3>
       <p class="principle-limits" data-zh={content.limits.zh} data-en={content.limits.en}>{content.limits.zh}</p>
     </section>
   </div>
@@ -35,16 +60,26 @@ const title={zh:`${tool.zh}的实现原理`,en:`How ${tool.en} works`};
 </script>
 <style>
   .principles-trigger{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;font-size:12px;padding:8px 12px;background:var(--surface);color:var(--muted)}
-  .principles-dialog{width:min(680px,calc(100vw - 40px));max-height:calc(100dvh - 48px);padding:0;margin:auto;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);box-shadow:0 20px 80px #07132533;overflow:auto;overscroll-behavior:contain;text-align:left}
+  .principles-dialog{width:min(720px,calc(100vw - 40px));max-height:calc(100dvh - 48px);padding:0;margin:auto;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);box-shadow:0 20px 80px #07132533;overflow:auto;overscroll-behavior:contain;text-align:left}
   .principles-dialog::backdrop{background:#0d19296b}
   .principles-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 26px 17px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
   .principles-header h2{font-size:21px;line-height:1.5;overflow-wrap:anywhere}
   .principles-close{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:34px;height:34px;padding:6px;border:0;background:transparent;color:var(--muted)}
   .principles-body{padding:22px 26px 26px;font-size:14px;line-height:1.9;overflow-wrap:anywhere}
   .principles-body .principle-summary{color:var(--muted);margin:0 0 23px}
-  .principles-body section+section{margin-top:24px}
-  .principles-body h3{font-size:14px;margin:0 0 10px;font-weight:650}
+  .principles-chapters{display:flex;flex-wrap:wrap;gap:6px 10px;margin-bottom:26px;padding-bottom:20px;border-bottom:1px solid var(--border)}
+  .principles-chapters button{font-size:12px;padding:6px 10px;color:var(--accent);background:var(--accent-soft);border:0}
+  .principles-body section+section{margin-top:28px}
+  .principles-body h3{font-size:15px;margin:0 0 12px;font-weight:650}
+  .principles-body h4{font-size:14px;margin:0 0 8px;font-weight:600}
   .principles-body p{margin:0;color:var(--text)}
+  .principle-detail{margin-top:20px}
+  .principle-detail+.principle-detail{padding-top:20px;border-top:1px solid var(--border)}
+  .principle-detail p+p{margin-top:10px}
+  .principle-code{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface-alt);border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin:12px 0 0;font-family:var(--code);font-size:12px;line-height:1.8;tab-size:2}
+  .principle-code code{font:inherit;white-space:inherit}
+  .principle-example .principle-code{margin:8px 0 16px}
+  .principle-example h4{font-size:12px;color:var(--muted)}
   .principle-steps{padding-left:22px;margin:0}
   .principle-steps li{padding-left:5px;margin:0 0 12px}
   .principle-steps li::marker{color:var(--accent);font-weight:600}
@@ -54,6 +89,9 @@ const title={zh:`${tool.zh}的实现原理`,en:`How ${tool.en} works`};
     .principles-header{padding:17px 18px 14px;gap:8px}
     .principles-header h2{font-size:18px}
     .principles-body{padding:18px;font-size:13px}
+    .principles-chapters{gap:8px}
+    .principles-chapters button{min-height:38px}
+    .principle-code{padding:12px;font-size:11px}
     .principles-trigger{min-height:38px}
   }
 </style>

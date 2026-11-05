@@ -86,6 +86,12 @@ try{
       assert.ok((await dialog.locator('#principles-title').textContent()).includes(tool.zh));
       assert.equal(await dialog.locator('.principle-steps li').count(),3);
       assert.ok((await dialog.locator('.principle-implementation').textContent()).trim().length>20);
+      assert.ok(await dialog.locator('.principle-detail').count()>0,`${tool.id}: missing technical explanation`);
+      for(const part of ['input','output','explanation'])assert.ok((await dialog.locator(`.principle-example-${part}`).textContent()).trim(),`${tool.id}: missing worked example ${part}`);
+      assert.ok(await dialog.locator('pre code').evaluateAll(nodes=>nodes.every(n=>n.childElementCount===0&&n.textContent===n.dataset.zh)),`${tool.id}: code and examples render literally, including markup and escapes`);
+      await dialog.locator('[data-principle-jump="principle-example-heading"]').click();
+      assert.ok(await dialog.locator('#principle-example-heading').evaluate(n=>n===document.activeElement));
+      assert.ok(await dialog.evaluate(n=>n.scrollTop>0),'Example shortcut scrolls the long explanation');
       assert.ok(await page.evaluate(()=>document.querySelector('#principles-dialog').contains(document.activeElement)));
       for(let i=0;i<4;i++)await page.keyboard.press('Tab');
       assert.ok(await page.evaluate(()=>document.querySelector('#principles-dialog').contains(document.activeElement)));
@@ -98,6 +104,7 @@ try{
       assert.equal(await opener.textContent().then(t=>t.trim()),'How it works');
       assert.ok((await dialog.locator('#principles-title').textContent()).includes(tool.en));
       assert.doesNotMatch(await dialog.locator('.principle-summary,.principle-steps,.principle-implementation,.principle-limits').allTextContents().then(t=>t.join(' ')),/[\u4e00-\u9fff]/);
+      assert.ok(await dialog.locator('[data-en]').evaluateAll(nodes=>nodes.every(n=>n.textContent===n.dataset.en)),`${tool.id}: all explanation text switches to English, including examples`);
       await page.locator('#principles-close').click();
       if(await editable.count())assert.equal(await editable.inputValue(),'keep 你好 😀');
       await page.locator('#language-toggle').click();
@@ -105,6 +112,8 @@ try{
     await openTool('D01');
     await page.locator('#principles-open').click();
     await page.screenshot({path:resolve(screenshots,'principles-desktop.png'),fullPage:true});
+    await page.locator('[data-principle-jump="principle-details-heading"]').click();
+    await page.screenshot({path:resolve(screenshots,'principles-technical-desktop.png'),fullPage:true});
     await page.mouse.click(4,4);
     assert.equal(await page.locator('#principles-dialog').isVisible(),false,'Backdrop closes the dialog');
     await page.locator('#theme-select').selectOption('dark');
@@ -113,10 +122,23 @@ try{
       await openTool(id);await page.locator('#principles-open').click();await noOverflow();
       assert.ok(await page.locator('#principles-dialog').evaluate(n=>n.scrollWidth<=n.clientWidth+1));
       assert.ok(await page.locator('#principles-close').isVisible());
+      await page.locator('[data-principle-jump="principle-example-heading"]').click();
+      assert.ok(await page.locator('#principle-example-heading').evaluate(n=>{
+        const box=n.getBoundingClientRect(),header=document.querySelector('.principles-header').getBoundingClientRect();
+        return box.top>=header.bottom&&box.bottom<innerHeight;
+      }),'Example shortcut leaves its heading below the sticky header');
+      if(id==='I01')await page.screenshot({path:resolve(screenshots,'principles-example-mobile-dark.png'),fullPage:true});
       await page.locator('#principles-dialog').evaluate(n=>n.scrollTop=n.scrollHeight);
       assert.ok(await page.locator('.principle-limits').isVisible());
       if(id==='I01')await page.screenshot({path:resolve(screenshots,'principles-mobile-dark.png'),fullPage:true});
       await page.locator('#principles-close').click();
+      await page.locator('#principles-open').click();
+      assert.equal(await page.locator('#principles-dialog').evaluate(n=>n.scrollTop),0,'Reopening starts at the overview');
+      await page.keyboard.press('Shift+Tab');
+      assert.ok(await page.locator('[data-principle-jump="principle-limits-heading"]').evaluate(n=>n===document.activeElement),'Reverse Tab stays inside the dialog');
+      await page.keyboard.press('Tab');
+      assert.ok(await page.locator('#principles-close').evaluate(n=>n===document.activeElement));
+      await page.keyboard.press('Escape');
     }
     await page.setViewportSize({width:1440,height:1000});
     await page.locator('#theme-select').selectOption('light');

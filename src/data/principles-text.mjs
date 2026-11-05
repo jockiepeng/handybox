@@ -240,3 +240,365 @@ export const textPrinciples = {
     limits: { zh: '仅支持平面对象数组或二维数组；含表头导入时，表头须非空且唯一，各行列数须一致。文件最多 2 MiB，预览最多 20 行；嵌套对象和混合行类型会报错。', en: 'Supports flat object arrays or two-dimensional arrays. Imports with headers require nonempty, unique headers and consistent row widths. Files are capped at 2 MiB and previews at 20 rows; nested objects and mixed row types are rejected.' },
   },
 };
+
+const technicalTextDetails = {
+  D01: {
+    details: [
+      {
+        title: { zh: '语法树与数字精度', en: 'Structure and numeric precision' },
+        paragraphs: [{ zh: 'JSON 文本中的数字只是十进制字符序列，而 JavaScript Number 使用 IEEE 754 双精度浮点表示。整数超过 2⁵³−1 后，相邻值可能映射到同一个 Number。这里先用 lossless-json 解析，数字保存在 LosslessNumber 中，不先转换成浮点数。因此即使整数很长，重新序列化时也能写回原数字，而不是把已经舍入的值再排版。', en: 'A JSON number begins as decimal text, whereas JavaScript Number uses IEEE 754 double precision. Above 2⁵³−1, adjacent integers may map to the same Number. lossless-json parses numbers into LosslessNumber values without first converting them to floating point, allowing serialization to retain the original numeric text rather than format a rounded value.' }],
+      },
+      {
+        title: { zh: '格式化、压缩与校验共用一条路径', en: 'One path for formatting, minification and validation' },
+        paragraphs: [{ zh: '三个操作都会先调用库的 parse()，所以字符串内部的空格、转义引号和换行不会被误当成排版删除。格式化向 stringify() 传入缩进宽度 2，压缩传入 0；校验同样完成解析和序列化，但界面只显示有效状态。这不是用正则清除空白，也不会尝试猜测缺失的引号或逗号。下面是实际流程的简化示意。', en: 'All three operations begin with parse(), so spaces, escaped quotes and newlines inside strings are not mistaken for removable layout. stringify() receives an indentation width of 2 for formatting or 0 for minification. Validation follows the same parse-and-serialize path but displays only validity. It neither removes whitespace with a regex nor guesses missing quotes or commas; the code below is a simplified flow.' }],
+        code: { zh: 'value = losslessParse(input)\noutput = losslessStringify(value, null, minify ? 0 : 2)', en: 'value = losslessParse(input)\noutput = losslessStringify(value, null, minify ? 0 : 2)' },
+      },
+      {
+        title: { zh: '语法正确不等于业务正确', en: 'Syntax validity versus application validity' },
+        paragraphs: [{ zh: '解析失败会保留库返回的位置说明，方便定位无效字符，但本工具不检查字段是否齐全、类型是否符合接口约定，也不执行 JSON Schema。解析后的结构和输出字符串同时占用内存，深层嵌套还受运行时调用栈约束；200 万个 UTF-16 代码单元只是输入上限，不代表任意形状的数据都能以同样速度处理。', en: 'Parser errors retain the library’s position information, but the tool does not check required fields, API-specific types or JSON Schema. Parsed structures and output strings coexist in memory, and deeply nested input is also constrained by the runtime stack. The 2-million-code-unit limit is an input bound, not a promise that every data shape has the same processing cost.' }],
+      },
+    ],
+    example: {
+      input: { zh: '操作：格式化\n{"n":9007199254740993,"ok":true}', en: 'Mode: Format\n{"n":9007199254740993,"ok":true}' },
+      output: { zh: '{\n  "n": 9007199254740993,\n  "ok": true\n}', en: '{\n  "n": 9007199254740993,\n  "ok": true\n}' },
+      explanation: { zh: '输出采用两空格缩进，n 的最后一位仍为 3。若先用普通 JSON.parse() 将这个数读成 Number，它会成为 9007199254740992；这里通过无损数字表示避免了这一步。', en: 'The output uses two-space indentation and n still ends in 3. Ordinary JSON.parse() would read this value as the Number 9007199254740992; lossless number storage avoids that conversion.' },
+    },
+  },
+  D02: {
+    details: [
+      {
+        title: { zh: '码点与 UTF-16 代码单元', en: 'Code points versus UTF-16 code units' },
+        paragraphs: [{ zh: 'JavaScript 字符串按 UTF-16 存储。基本多文种平面内的“中”占一个代码单元，码点超过 U+FFFF 的 😀 则占高、低两个代理项。工具使用 charCodeAt() 逐单元读取，因此输出分别是一个和两个四位转义，并不是把 Emoji 的码点直接写成一个超长的反斜杠 u 表达式。下面给出代理对的标准换算关系。', en: 'JavaScript strings use UTF-16. The BMP character 中 occupies one code unit, while 😀 lies above U+FFFF and occupies a high and a low surrogate. The tool reads units with charCodeAt(), so these become one and two four-digit escapes respectively, rather than one oversized backslash-u escape. The formula below describes the standard surrogate-pair mapping.' }],
+        code: { zh: 'U = codePoint − 0x10000\nhigh = 0xD800 + (U >> 10)\nlow  = 0xDC00 + (U & 0x3FF)\nU+1F600 → D83D DE00', en: 'U = codePoint − 0x10000\nhigh = 0xD800 + (U >> 10)\nlow  = 0xDC00 + (U & 0x3FF)\nU+1F600 → D83D DE00' },
+      },
+      {
+        title: { zh: '逐字符扫描，而不是执行字符串', en: 'Scanning text without executing it' },
+        paragraphs: [{ zh: '编码保留 ASCII 32–126 范围的可打印字符，反斜杠单独加倍，其他代码单元写成小写十六进制并补足四位。解码器遇到反斜杠时检查下一字符：只有双反斜杠，或 u 后恰好四位十六进制数字会被接受；随后用 String.fromCharCode() 还原。整个过程不调用 eval()，输入不能借此成为可执行代码。', en: 'Encoding preserves printable ASCII from 32 through 126, doubles backslashes and writes other code units as four-digit lowercase hexadecimal escapes. The decoder examines each backslash and accepts either another backslash or u followed by four hexadecimal digits, then reconstructs units with String.fromCharCode(). It never calls eval(), so input is not executed.' }],
+      },
+      {
+        title: { zh: '可逆范围与未做的规范化', en: 'Round trips and normalization boundaries' },
+        paragraphs: [{ zh: '由于反斜杠也被编码，原文中看起来像转义的六个字面字符不会和一个真实字符混淆。解码只处理本工具约定的两种形式，不把反斜杠 n 转为换行，也不解释花括号码点语法。它按代码单元保留内容，不做 Unicode 正规化或孤立代理项修复；视觉相同但编码不同的文字仍可能产生不同输出。', en: 'Escaping backslashes keeps six literal characters that resemble an escape distinct from an actual character. Decoding recognizes only the tool’s two supported forms: it does not interpret backslash-n or brace-style code-point escapes. It preserves code units without Unicode normalization or repairing lone surrogates, so visually identical text can still encode differently.' }],
+      },
+    ],
+    example: {
+      input: { zh: '操作：编码\n中😀', en: 'Mode: Encode\n中😀' },
+      output: { zh: '\\u4e2d\\ud83d\\ude00', en: '\\u4e2d\\ud83d\\ude00' },
+      explanation: { zh: '两个 Unicode 码点在 UTF-16 中共占三个代码单元，因此得到三组转义。把这段输出切换到解码模式处理，会恢复为同样的“中😀”。', en: 'The two Unicode code points occupy three UTF-16 code units, producing three escapes. Decoding this output restores the same 中😀 text.' },
+    },
+  },
+  D03: {
+    details: [
+      {
+        title: { zh: '从 UTF-8 字节到六位分组', en: 'From UTF-8 bytes to six-bit groups' },
+        paragraphs: [{ zh: 'Base64 表示的是字节而非字符。TextEncoder 先把文字编码成 UTF-8，例如“中”为 E4 B8 AD，😀 为 F0 9F 98 80。标准 Base64 每三个字节形成 24 位，再拆成四个 6 位索引，从 64 字符表中取字符；末组不足三个字节时用等号表示填充。这个位分组由浏览器 btoa() 完成，工具不自行实现编码表。', en: 'Base64 represents bytes, not characters. TextEncoder first emits UTF-8: 中 becomes E4 B8 AD and 😀 becomes F0 9F 98 80. Standard Base64 groups three bytes into 24 bits, splits them into four six-bit indices and looks up a 64-character alphabet, using equals signs for incomplete final groups. Browser btoa(), rather than a custom encoder, performs this mapping.' }],
+        code: { zh: '3 字节 = 24 位 = 4 × 6 位\n有填充时的字符数 = 4 × ceil(字节数 / 3)', en: '3 bytes = 24 bits = 4 × 6 bits\nPadded character count = 4 × ceil(byteCount / 3)' },
+      },
+      {
+        title: { zh: '浏览器 API 与 URL 变体', en: 'Browser APIs and the URL variant' },
+        paragraphs: [{ zh: 'btoa() 需要每个字符都在 0–255 范围内的二进制字符串，因此工具把 Uint8Array 分成小块转换，避免一次展开过多参数。Base64URL 保持同样的六位数据，只把 +、/ 改成 -、_ 并去掉末尾等号。解码先清除空白，再按开关还原字母表和必要填充；长度余 1 或填充位置不合法会被拒绝。', en: 'btoa() expects a binary string whose characters fit in 0–255. The tool converts Uint8Array chunks to avoid spreading too many arguments at once. Base64URL keeps the same six-bit data but substitutes - and _ for + and / and removes trailing equals signs. Decoding removes whitespace, restores the selected alphabet and padding, and rejects impossible lengths or malformed padding.' }],
+      },
+      {
+        title: { zh: '解码成功还需要 UTF-8 有效', en: 'Valid Base64 is not necessarily valid UTF-8' },
+        paragraphs: [{ zh: 'atob() 恢复字节后，TextDecoder 使用 fatal: true 解读 UTF-8；因此一串语法合法的 Base64 若表示图片或任意二进制内容，也可能因不是有效文字而报错。Base64 通常把体积扩大约三分之一，本工具还会同时保留输入、字节和结果；它是可逆表示，没有密钥，也不会增加内容的保密性。', en: 'After atob() restores bytes, TextDecoder reads UTF-8 with fatal: true. Syntactically valid Base64 for an image or arbitrary binary data can therefore fail because it is not valid text. Base64 generally expands data by about one third, and input, byte buffers and output coexist in memory. It is reversible, uses no secret key and provides no confidentiality.' }],
+      },
+    ],
+    example: {
+      input: { zh: '操作：编码；Base64URL：关闭\n中😀', en: 'Mode: Encode; Base64URL: off\n中😀' },
+      output: { zh: '5Lit8J+YgA==', en: '5Lit8J+YgA==' },
+      explanation: { zh: '原文共有 7 个 UTF-8 字节，标准输出长 12 个字符，末尾含两个填充等号。开启 Base64URL 后，同一输入得到 5Lit8J-YgA。', en: 'The text contains seven UTF-8 bytes, yielding 12 Base64 characters including two padding signs. With Base64URL enabled, the same input produces 5Lit8J-YgA.' },
+    },
+  },
+  D04: {
+    details: [
+      {
+        title: { zh: '百分号编码与地址结构', en: 'Percent encoding and URL structure' },
+        paragraphs: [{ zh: '百分号编码先将字符编码为 UTF-8 字节，再用 %HH 表示需要转义的字节。encodeURI() 假定输入是完整地址，会保留冒号、斜杠、问号等结构字符；encodeURIComponent() 假定输入是一个参数值，会把这些字符也转义。两种解码函数同样有区别，不能总用整址解码替代参数解码。选择范围决定了分隔符究竟是结构还是数据。', en: 'Percent encoding uses UTF-8 bytes and represents escaped bytes as %HH. encodeURI() assumes a full address and preserves structural characters such as colons, slashes and question marks; encodeURIComponent() treats them as component data and escapes them. The corresponding decoders also differ. The selected scope determines whether a separator is structure or literal data.' }],
+      },
+      {
+        title: { zh: '重复参数需要有序列表', en: 'Repeated parameters need an ordered list' },
+        paragraphs: [{ zh: '解析路径先识别带协议的完整地址或 // 开头的地址，再由 URL 提取 searchParams；裸查询则先移除 # 后的片段部分。URLSearchParams 按表单查询规则解码，+ 在此代表空格，而 %2B 代表字面加号。展开结果保留键值对顺序，避免把 tag=a&tag=b 转成普通对象后只剩一个 tag。完整地址没有问号时也不会凭空生成参数。', en: 'Parsing first recognizes absolute or //-prefixed addresses and uses URL.searchParams. For raw queries, it removes the fragment beginning with # first. URLSearchParams applies form-query rules: + means a space, while %2B means a literal plus sign. An ordered entry list preserves tag=a&tag=b instead of losing one tag in an object, and queryless full addresses yield no entries.' }],
+        code: { zh: 'tag=a&tag=b → [["tag", "a"], ["tag", "b"]]\nq=a+b → [["q", "a b"]]\nq=a%2Bb → [["q", "a+b"]]', en: 'tag=a&tag=b → [["tag", "a"], ["tag", "b"]]\nq=a+b → [["q", "a b"]]\nq=a%2Bb → [["q", "a+b"]]' },
+      },
+      {
+        title: { zh: '解析不是发起网络请求', en: 'Parsing is not a network request' },
+        paragraphs: [{ zh: 'URL 和 URLSearchParams 都只在内存中分析字符串；工具不会打开该地址，也不检查服务器是否存在。百分号解码依赖内建函数，损坏的转义序列会报错；查询解析则采用 URLSearchParams 自己的容错规则，两者并非完全相同的校验器。片段中的问号不是查询起点，裸参数值中的空格也不会为排版而被清除。', en: 'URL and URLSearchParams analyze strings in memory without opening addresses or checking a server. Direct percent decoding uses built-in functions and throws on malformed escapes, whereas query parsing follows URLSearchParams’ own forgiving rules; they are not identical validators. A question mark in a fragment does not begin a query, and spaces in raw parameter values are not trimmed for presentation.' }],
+      },
+    ],
+    example: {
+      input: { zh: '操作：解析查询参数\nhttps://example.com/?tag=a&tag=b', en: 'Mode: Parse query parameters\nhttps://example.com/?tag=a&tag=b' },
+      output: { zh: '[\n  [\n    "tag",\n    "a"\n  ],\n  [\n    "tag",\n    "b"\n  ]\n]', en: '[\n  [\n    "tag",\n    "a"\n  ],\n  [\n    "tag",\n    "b"\n  ]\n]' },
+      explanation: { zh: '两个同名键都保留，顺序与地址一致。若输入改为 https://example.com/path#part，则没有查询部分，结果为 []。', en: 'Both repeated keys remain in their original order. Changing the input to https://example.com/path#part produces [] because the address has no query.' },
+    },
+  },
+  D05: {
+    details: [
+      {
+        title: { zh: '时间点与墙上时钟', en: 'An instant versus a wall-clock time' },
+        paragraphs: [{ zh: 'Unix 值描述从 1970-01-01T00:00:00Z 起经过的时间，时区不是这个数字的一部分。工具把秒乘以 1000 后交给 Luxon 的 fromMillis()；毫秒直接读取。显示北京时间或纽约时间时，只改变同一时间点的当地日期和 UTC 偏移，不在时间戳上再加八小时。把时区偏移直接加到 Unix 值会得到另一个时间点。', en: 'A Unix value measures time since 1970-01-01T00:00:00Z; a time zone is not part of that number. Seconds are multiplied by 1,000 before Luxon.fromMillis(), while milliseconds are used directly. Displaying Beijing or New York time changes the local date and UTC offset for the same instant. Adding eight hours to the Unix value itself would produce a different instant.' }],
+        code: { zh: 'milliseconds = seconds × 1000\n同一时间点：\n1970-01-01T00:00:00Z\n1970-01-01T08:00:00+08:00', en: 'milliseconds = seconds × 1000\nThe same instant:\n1970-01-01T00:00:00Z\n1970-01-01T08:00:00+08:00' },
+      },
+      {
+        title: { zh: 'ISO 偏移与 IANA 时区', en: 'ISO offsets and IANA zones' },
+        paragraphs: [{ zh: '日期输入由 DateTime.fromISO() 解析。带 Z 或显式偏移的日期先由该偏移确定时间点；没有偏移时，则借助选定 IANA 时区来解释当地时间。IANA 名称包含历史和夏令时规则，而 +08:00 只是固定偏移。Luxon 使用运行环境提供的时区能力，再将结果输出为 UTC、Asia/Shanghai 以及用户选择的时区。', en: 'DateTime.fromISO() parses date input. Z or an explicit offset determines the instant; otherwise the selected IANA zone interprets the local clock time. An IANA name carries historical and DST rules, whereas +08:00 is only a fixed offset. Luxon uses the runtime’s zone support and formats the result in UTC, Asia/Shanghai and the selected zone.' }],
+      },
+      {
+        title: { zh: '夏令时空缺与重复时段', en: 'DST gaps and overlaps' },
+        paragraphs: [{ zh: '某些地区春季会跳过一段本地时间，秋季又会重复一段。日期库可能自动把不存在的时间向后调整，因此工具把解析后的年月日时分与无偏移输入比较，不一致就拒绝。回拨时同一钟点可能对应两个时间点，建议输入明确偏移。数值和日期还受 JavaScript 日期范围限制；这里不模拟闰秒，也不提供任意精度的亚毫秒计算。', en: 'Some zones skip local times in spring and repeat them in autumn. Because a date library may shift a nonexistent time forward, the tool compares the parsed local year, month, day, hour and minute with offset-free input and rejects a mismatch. Explicit offsets disambiguate overlaps. Values remain bounded by JavaScript date ranges; leap seconds and arbitrary-precision submillisecond arithmetic are not modeled.' }],
+      },
+    ],
+    example: {
+      input: { zh: '操作：Unix 秒 → 日期\n时区：Asia/Shanghai\n0', en: 'Mode: Unix seconds → date\nZone: Asia/Shanghai\n0' },
+      output: { zh: 'Unix 秒: 0\nUnix 毫秒: 0\nUTC: 1970-01-01T00:00:00.000Z\n北京时间: 1970-01-01T08:00:00.000+08:00\n选定时区: 1970-01-01T08:00:00.000+08:00', en: 'Unix seconds: 0\nUnix milliseconds: 0\nUTC: 1970-01-01T00:00:00.000Z\nBeijing time: 1970-01-01T08:00:00.000+08:00\nSelected zone: 1970-01-01T08:00:00.000+08:00' },
+      explanation: { zh: '时间戳保持为 0，UTC 显示午夜，北京显示早上八点；这两种日期表示同一个时间点，并不是把时间戳改成了 28800。', en: 'The timestamp stays zero while UTC displays midnight and Beijing displays 08:00. These are two representations of one instant, not a change to timestamp 28800.' },
+    },
+  },
+  D06: {
+    details: [
+      {
+        title: { zh: '128 位标识符中的随机部分', en: 'The random portion of a 128-bit identifier' },
+        paragraphs: [{ zh: 'UUID 是一个 128 位值，通常用 32 个十六进制数字加四个连字符写成 8-4-4-4-12 格式。v4 固定版本字段为二进制 0100，RFC 变体还固定两个高位，留下 122 个随机位。于是第三组首位为 4，第四组首位只能是 8、9、a 或 b。格式标记不是额外随机熵，不能把 128 位全都算作独立随机位。', en: 'A UUID is a 128-bit value commonly written as 32 hexadecimal digits with four hyphens in an 8-4-4-4-12 layout. Version 4 fixes its version field to 0100 and the RFC variant fixes two more high bits, leaving 122 random bits. The third group starts with 4 and the fourth with 8, 9, a or b; those format bits do not contribute random entropy.' }],
+        code: { zh: 'xxxxxxxx-xxxx-4xxx-[89ab]xxx-xxxxxxxxxxxx\n随机位数 = 128 − 4 − 2 = 122', en: 'xxxxxxxx-xxxx-4xxx-[89ab]xxx-xxxxxxxxxxxx\nRandom bits = 128 − 4 − 2 = 122' },
+      },
+      {
+        title: { zh: '随机源和格式由浏览器负责', en: 'The browser supplies randomness and formatting' },
+        paragraphs: [{ zh: '工具检查数量为 1–1000 的整数，再对每条结果调用 crypto.randomUUID()。密码学随机源、版本与变体位设置、十六进制格式化都由浏览器实现提供，代码不拼接当前时间、设备编号或 Math.random()。批量结果用换行连接，复制和下载使用同一份内存中的字符串，不把生成值写入浏览器偏好存储。', en: 'After checking an integer count from 1 to 1,000, the tool calls crypto.randomUUID() for every result. The browser supplies cryptographic randomness, version and variant bits and hexadecimal formatting; the code does not combine timestamps, device identifiers or Math.random(). Batch results are joined with newlines and reused for copying and downloading without being saved as preferences.' }],
+      },
+      {
+        title: { zh: '碰撞概率与适用场景', en: 'Collision probability and intended use' },
+        paragraphs: [{ zh: '随机抽样不提供数学上的唯一性保证。理想独立随机且碰撞概率很小时，生成 n 个值的碰撞概率约为 n(n−1)/(2×2¹²²)，但工具不会维护全局登记册来证明唯一性。v4 也不携带排序时间。UUID 可用于分布式记录标识；需要强制唯一约束时仍应由数据库检查，不能把它的随机外观当作访问授权。', en: 'Random sampling cannot prove uniqueness. Under ideal independent randomness and when the collision probability is small, the probability for n values is approximately n(n−1)/(2×2¹²²), but this tool keeps no global registry. v4 also carries no ordering timestamp. UUIDs suit distributed identifiers; databases should still enforce required uniqueness, and random-looking identifiers are not authorization.' }],
+      },
+    ],
+    example: {
+      input: { zh: '生成数量：1', en: 'Count: 1' },
+      output: { zh: '6f9619ff-8b86-4e1c-9b66-42d4b8f2f9a1', en: '6f9619ff-8b86-4e1c-9b66-42d4b8f2f9a1' },
+      explanation: { zh: '这是一次可能结果的格式示例，每次实际生成都会重新取随机值。第三组以 4 开头，第四组以 9 开头，符合 v4 和 RFC 变体的位布局；不要将这个公开示例用于秘密值。', en: 'This illustrates one possible result; actual runs draw new randomness. The third group starts with 4 and the fourth with 9, matching v4 and RFC variant bits. This public example is not a secret.' },
+    },
+  },
+  D07: {
+    details: [
+      {
+        title: { zh: '摘要处理的是精确字节', en: 'Digests operate on exact bytes' },
+        paragraphs: [{ zh: '同样看起来是文字，字节内容仍可能不同。工具用 TextEncoder 将文本编码为 UTF-8，不自动删除空白、统一换行或做 Unicode 正规化。选择文件后则优先使用文件的原始 ArrayBuffer，不把文件内容先解读成文字。因此 LF 与 CRLF、有无 UTF-8 BOM、组合字符与预组合字符，都可能得到不同的摘要，这是按字节校验的正常结果。', en: 'Text that looks identical can still have different bytes. TextEncoder produces UTF-8 without trimming whitespace, normalizing line endings or applying Unicode normalization. A selected file takes priority and supplies its raw ArrayBuffer without text decoding. LF versus CRLF, a UTF-8 BOM and composed versus decomposed characters can therefore produce different digests, as expected for byte-level checks.' }],
+      },
+      {
+        title: { zh: 'SHA 标准与 Web Crypto 的职责', en: 'SHA standards and Web Crypto’s role' },
+        paragraphs: [{ zh: '从标准原理看，SHA-256 以 512 位消息块处理数据，SHA-512 使用 1024 位块；标准规定填充、消息扩展和压缩轮，最终得到 256 或 512 位摘要。这些步骤并不由页面手写实现，而是交给 crypto.subtle.digest()。工具只选择算法、传入字节，再把每个结果字节补足两位十六进制，因此输出分别是 64 和 128 个字符。', en: 'At the standards level, SHA-256 processes 512-bit message blocks and SHA-512 uses 1,024-bit blocks. Padding, message expansion and compression rounds yield 256- or 512-bit digests. The page does not implement these rounds; crypto.subtle.digest() does. The tool selects the algorithm, supplies bytes and formats every result byte as two hexadecimal digits, producing 64 or 128 characters.' }],
+        code: { zh: 'bytes = UTF8(text) 或 file.arrayBuffer()\ndigestBytes = await crypto.subtle.digest("SHA-256", bytes)\nhex = 每个字节转为两位小写十六进制', en: 'bytes = UTF8(text) or file.arrayBuffer()\ndigestBytes = await crypto.subtle.digest("SHA-256", bytes)\nhex = each byte formatted as two lowercase hex digits' },
+      },
+      {
+        title: { zh: '完整读入与校验能力的边界', en: 'Whole-buffer memory use and verification limits' },
+        paragraphs: [{ zh: '当前流程把整个文件读入内存，再一次性调用 digest()，不是流式分块哈希，所以设置了 100 MiB 文件上限。Promise 返回并不代表文件不会占用完整缓冲区。相同摘要可以用于比较文件是否与可信公布值一致，但普通 SHA 不含密钥，无法证明发送者身份，也不是适合直接保存密码的慢速派生算法；工具不提供 HMAC 或签名验证。', en: 'The current flow reads a whole file and calls digest() once rather than hashing a stream, hence the 100 MiB file cap. Returning a Promise does not remove whole-buffer memory use. A digest can be compared with a trusted published checksum, but unkeyed SHA cannot identify a sender and is not a slow password-storage derivation function. HMAC and signature verification are not provided.' }],
+      },
+    ],
+    example: {
+      input: { zh: '算法：SHA-256；未选择文件\nabc', en: 'Algorithm: SHA-256; no file selected\nabc' },
+      output: { zh: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', en: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad' },
+      explanation: { zh: '输入恰好是三个字节 61 62 63，末尾没有换行。增加一个换行或把 a 改为 A 都会改变摘要；输出长度固定，与输入文件大小无关。', en: 'The input is exactly bytes 61 62 63, with no trailing newline. Adding a newline or changing a to A changes the digest; digest length is fixed regardless of input size.' },
+    },
+  },
+  D08: {
+    details: [
+      {
+        title: { zh: '以行作为比较单元', en: 'Lines as comparison tokens' },
+        paragraphs: [{ zh: '逐行差异比较先把输入变成行序列，再寻找可保留的共同片段和需要插入、删除的片段。这里调用 diff 库的 diffLines()，不是在页面中手写逐字符编辑算法。库默认把 LF 或 CRLF 换行附在所属行上，所以末行有没有换行也可能影响比较；它不会按语义判断“这一行被移动了”，移动通常会表现为删除加新增。', en: 'Line comparison tokenizes text into lines, finds shared sections and identifies insertions and deletions. The tool uses diff.diffLines() rather than implementing a character-edit algorithm. By default, the library attaches LF or CRLF to its line, so a final newline can affect equality. It does not semantically identify moved lines; a move commonly appears as removal plus addition.' }],
+      },
+      {
+        title: { zh: '空白忽略的精确含义', en: 'Exactly what ignoring whitespace means' },
+        paragraphs: [{ zh: '开启忽略选项时，当前库在比较每行是否相同时使用 trim() 去掉首尾空白，不会删除行中间的空格。例如两端的缩进可以忽略，但 a b 与 a  b 仍可能不同。这个选项改变的是行的相等判定，不是对两份源文本先做永久清理；工具不会把某个操作结果自动覆盖回输入框。', en: 'With whitespace ignoring enabled, this library version trims line edges for equality checks; it does not remove internal spaces. Leading indentation may therefore be ignored while a b and a  b can still differ. The option changes comparison equality rather than permanently cleaning both source texts, and the result is not written over the inputs.' }],
+      },
+      {
+        title: { zh: '差异片段、显示和计算开销', en: 'Diff components, rendering and cost' },
+        paragraphs: [{ zh: '库返回含 value、added、removed 等字段的连续片段。工具给新增行加“+ ”、删除行加“- ”，保留行加两个空格，并在预览中着色；相邻删除和新增表达一次修改，不代表逐字替换。每边限制 20 万个代码单元并传入 2 秒库级超时，但该计算不在 Worker 中，复杂的高度不同文本仍可能短暂占用主线程。', en: 'The library returns contiguous components with value, added and removed fields. Added lines receive “+ ”, removed lines “- ” and unchanged lines two spaces, with colored previews. Adjacent removals and additions represent changes without character-level replacement claims. Each side is capped at 200,000 code units with a two-second library timeout; computation is not in a Worker and complex dissimilar input can still occupy the main thread briefly.' }],
+        code: { zh: '相同片段 → "  " + 行内容\n删除片段 → "- " + 行内容\n新增片段 → "+ " + 行内容', en: 'Unchanged → "  " + line\nRemoved   → "- " + line\nAdded     → "+ " + line' },
+      },
+    ],
+    example: {
+      input: { zh: '忽略首尾空白：关闭；两段末尾均有换行\n原文：\na\nb\n修改后：\na\nc\n', en: 'Ignore edge whitespace: off; both texts end with a newline\nOriginal:\na\nb\nModified:\na\nc\n' },
+      output: { zh: '  a\n- b\n+ c\n', en: '  a\n- b\n+ c\n' },
+      explanation: { zh: '第一行保留，第二行 b 被删除，c 被加入。结果前缀中的空格属于差异标记，不是原文中新增加的缩进；预览会为删除与新增分别着色。', en: 'The first line remains; b is removed and c is added. Spaces in the prefixes are diff markers rather than newly inserted source indentation; the preview colors removals and additions separately.' },
+    },
+  },
+};
+
+Object.assign(technicalTextDetails, {
+  D09: {
+    details: [
+      {
+        title: { zh: '原生引擎与可终止执行', en: 'Native matching with terminable execution' },
+        paragraphs: [{ zh: 'JavaScript 正则可能因大量回溯而耗时，尤其是重复量词嵌套且最终匹配失败时。工具不尝试静态判断表达式是否安全，而是在独立 Worker 中构造 RegExp。主线程启动 2 秒定时器，收到结果、发生异常、超时或点击取消后都会终止 Worker。它是运行隔离与时间限制，不是换成另一个无回溯引擎，也不会把正则发送到服务器。', en: 'JavaScript regexes can spend excessive time backtracking, particularly with nested repetition followed by failure. Instead of trying to prove a pattern safe statically, the tool constructs RegExp inside a dedicated Worker. The main thread starts a two-second timer and terminates the Worker on completion, errors, timeout or cancellation. This isolates execution; it does not replace the engine with a nonbacktracking one or send the pattern to a server.' }],
+      },
+      {
+        title: { zh: '匹配游标与 Unicode 边界', en: 'Match cursors and Unicode boundaries' },
+        paragraphs: [{ zh: '每次 exec() 后记录完整匹配、index、位置捕获组和命名捕获组；没有 g 标志时只列出一次匹配。全局正则遇到零长度匹配时，exec() 不会自动推进游标，工具因此手动移动 lastIndex：普通模式按一个 UTF-16 单元，u 或 v 模式按一个 Unicode 码点。索引本身仍是 UTF-16 偏移，所以 Emoji 后紧接的字符可能从索引 2 而不是 1 开始。', en: 'Each exec() result records the full match, index, positional captures and named captures. Without g, only one match is listed. Because exec() does not advance after a zero-length global match, the tool moves lastIndex by one UTF-16 unit normally or one Unicode code point under u or v. Returned indices still count UTF-16 units, so a character after an emoji can start at index 2 rather than 1.' }],
+        code: { zh: '简化游标示意：\nif (空匹配 && 全局模式) {\n  lastIndex += Unicode模式且遇到代理对 ? 2 : 1\n}', en: 'Simplified cursor flow:\nif (emptyMatch && globalMode) {\n  lastIndex += unicodeModeAndSurrogatePair ? 2 : 1\n}' },
+      },
+      {
+        title: { zh: '替换模板和输出放大', en: 'Replacement templates and output amplification' },
+        paragraphs: [{ zh: '替换再调用原生 replace()，由工具的回调展开 $$、$&、数字组、命名组及前后文引用。前后文引用可能把输出放大到远大于输入，因此回调累计长度，超过 400 万代码单元就抛错。匹配列表最多展示 1000 项，但这不表示只替换前 1000 项；是否全局替换取决于 g。达到展示上限会提示截断，部分组未参与匹配时也不会凭空生成文字。', en: 'Replacement uses native replace() with a callback that expands $$, $&, numbered and named captures and context references. Context references can amplify output, so the callback tracks length and throws above 4 million code units. The 1,000-item match display cap does not limit replacement to those items; g determines global replacement. Reaching the display cap marks truncation, and unmatched captures do not invent text.' }],
+      },
+    ],
+    example: {
+      input: { zh: '表达式：([A-Z])(\\d+)\n标志：g\n文本：A12\n替换模板：$1-$2', en: 'Pattern: ([A-Z])(\\d+)\nFlags: g\nText: A12\nReplacement: $1-$2' },
+      output: { zh: '匹配结果节选：\ntext: A12\nindex: 0\ngroups: ["A", "12"]\n替换结果：A-12', en: 'Match result excerpt:\ntext: A12\nindex: 0\ngroups: ["A", "12"]\nReplacement result: A-12' },
+      explanation: { zh: '这是结果字段的文字节选：第一组取到 A，第二组取到 12，模板中的短横线是字面字符。若使用 (?:)、gv 和 😀，匹配边界是 0、2，替换为 - 时得到 -😀-。', en: 'This is a textual excerpt of the result fields: capture 1 is A and capture 2 is 12, with a literal hyphen between them. For (?:), gv and 😀, boundaries are 0 and 2; replacing with - yields -😀-.' },
+    },
+  },
+  D10: {
+    details: [
+      {
+        title: { zh: '三段结构不等于三段都可信', en: 'Three segments are not three trust guarantees' },
+        paragraphs: [{ zh: '常见签名式 JWT 使用 Header.Payload.Signature 三段文本。前两段通常是 JSON 的 UTF-8 字节经过 Base64URL 表示，第三段用于完整性验证。本工具只要求恰好三段并解码前两段为对象，不读取密钥，也不验证第三段。Header 中的 alg 只是来自输入的数据，显示 HS256、RS256 或 none 都不构成算法已经执行或签名已经通过的证据。', en: 'A common signed JWT has Header.Payload.Signature segments. The first two are usually UTF-8 JSON encoded as Base64URL, and the third supports integrity verification. This tool only checks for three segments and decodes the first two into objects. It reads no keys and verifies no signature; an alg value such as HS256, RS256 or none is untrusted input, not evidence that an algorithm ran or verification succeeded.' }],
+      },
+      {
+        title: { zh: 'JSON 数字和时间声明', en: 'JSON numbers and time claims' },
+        paragraphs: [{ zh: 'JSON.parse() 的 reviver 检查超出安全整数范围的整数，利用支持该能力的浏览器提供的原始 source 片段把它保留为字符串；不是把所有 JSON 数字都变成任意精度类型，普通小数仍按 Number 处理。iat、exp、nbf 只有在值为 number 时才按秒乘 1000，再由 Date 输出 UTC；字段本来就是字符串时，不自动猜测并转换。', en: 'The JSON.parse() reviver checks unsafe integer values and, when supported by the browser, retains their original source text as strings. This is not arbitrary-precision parsing for every JSON number; ordinary decimals still use Number. Only numeric iat, exp and nbf values are multiplied by 1,000 and formatted as UTC with Date. String-valued claims are not guessed into timestamps.' }],
+        code: { zh: '时间字段换算：\nUTC = new Date(NumericDate × 1000).toISOString()\n注意：显示时间 ≠ 校验令牌有效期', en: 'Time-claim conversion:\nUTC = new Date(NumericDate × 1000).toISOString()\nDisplaying a time ≠ validating token lifetime' },
+      },
+      {
+        title: { zh: '数据查看器的安全边界', en: 'The boundary of a data inspector' },
+        paragraphs: [{ zh: '结果经 textContent 写入界面，Payload 内的标签或脚本只会显示为文本。工具不依据 exp 阻止输出，不验证 issuer、audience、nonce 或签名，因此不能代替身份认证库。五段式 JWE 加密令牌也不属于此流程。遇到非常大的整数且浏览器不提供原始数值片段时，工具宁可报错，也不把已经失真的整数当成准确声明展示。', en: 'Results are rendered with textContent, so tags or scripts inside a payload stay text. The tool does not block output based on exp or validate issuer, audience, nonce or signatures, and cannot replace an authentication library. Five-segment encrypted JWE tokens are outside this flow. If an unsafe integer cannot be recovered from original parser source, the tool rejects it rather than presenting a rounded integer as exact.' }],
+      },
+    ],
+    example: {
+      input: { zh: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiI0MiIsImV4cCI6MH0.', en: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiI0MiIsImV4cCI6MH0.' },
+      output: { zh: '解码结果节选：\nHeader: {"alg":"none"}\nPayload: {"sub":"42","exp":0}\nexp: 1970-01-01T00:00:00.000Z', en: 'Decoded result excerpt:\nHeader: {"alg":"none"}\nPayload: {"sub":"42","exp":0}\nexp: 1970-01-01T00:00:00.000Z' },
+      explanation: { zh: '这个公开示例的签名段为空，只演示解码。exp=0 被解释为 Unix 起点；界面能展示它，并不说明这是一个可接受、已验证或未过期的认证令牌。', en: 'This public example has an empty signature segment and demonstrates decoding only. exp=0 maps to the Unix epoch; displaying it does not make the token acceptable, verified or unexpired.' },
+    },
+  },
+  D11: {
+    details: [
+      {
+        title: { zh: '位权与逐位累积', en: 'Place values and digit accumulation' },
+        paragraphs: [{ zh: '位置计数法中，每向左一位，位权乘以进制 b。代码从零开始，对每个数字执行 n=n×b+d：先把已经读过的部分左移一个“进制位”，再加入下一位。这里 n、b、d 都参与 BigInt 运算，不先使用 parseInt() 把整串数变成 Number。因此二进制、八进制或十六进制的大整数都不会在中途被浮点数舍入。', en: 'In positional notation, each place to the left multiplies its weight by base b. Starting at zero, the code applies n=n×b+d for each digit, shifting the accumulated prefix one base-position and adding the next digit. Accumulation uses BigInt, rather than parseInt() on the whole string into Number, so large binary, octal and hexadecimal integers are not rounded in transit.' }],
+        code: { zh: '十六进制 1A 的实际累积：\n0n × 16n + 1n  = 1n\n1n × 16n + 10n = 26n\n26n.toString(2) = "11010"', en: 'Actual accumulation for hexadecimal 1A:\n0n × 16n + 1n  = 1n\n1n × 16n + 10n = 26n\n26n.toString(2) = "11010"' },
+      },
+      {
+        title: { zh: '符号、前缀与合法数字', en: 'Signs, prefixes and valid digits' },
+        paragraphs: [{ zh: '输入先去掉两端空白并统一为小写，再识别正负号；0x、0b、0o 只有与选定输入进制对应时才作为前缀移除。每个字符单独转换为数字并检查 d<b，所以二进制中的 2 或十六进制中的 g 会报错，而不是像宽松的整数解析那样只取前半段。空内容和超过 1 万位的输入也在累积之前被拒绝。', en: 'Input is trimmed and lowercased before reading a sign. Prefixes 0x, 0b and 0o are removed only when they match the selected input base. Every character is converted and checked against d<b, so binary 2 or hexadecimal g causes an error rather than accepting a valid prefix of the text. Empty input and more than 10,000 digits are rejected before accumulation.' }],
+      },
+      {
+        title: { zh: '输出表示与大数计算成本', en: 'Output representation and big-integer cost' },
+        paragraphs: [{ zh: '累积后通过 BigInt.toString(radix) 生成目标进制字符串，具体的大整数格式化由运行时负责。结果使用小写十六进制，不保留输入的前导零、正号或原有前缀；负号表示数学上的负整数，不是固定位宽补码。BigInt 精度可增长，但乘法和字符串输出的内存与耗时也随位数增长，输入上限因此不能理解成固定耗时保证。', en: 'BigInt.toString(radix) delegates target-base formatting to the runtime. Output uses lowercase hex and does not preserve leading zeros, a plus sign or the original prefix. A minus sign represents a mathematical negative integer, not fixed-width two’s complement. BigInt precision can grow, but multiplication and output memory and cost grow with digit count; the input cap is not a fixed-time guarantee.' }],
+      },
+    ],
+    example: {
+      input: { zh: '输入进制：16；输出进制：10\n20000000000001', en: 'Input base: 16; output base: 10\n20000000000001' },
+      output: { zh: '9007199254740993', en: '9007199254740993' },
+      explanation: { zh: '结果等于 2⁵³+1，已经超过 Number 的安全整数范围，最后一位仍精确保留为 3。若输入 -10 并从二进制转十六进制，结果为 -2，而不是某种固定位宽的全 f 表示。', en: 'The value is 2⁵³+1, beyond Number’s safe-integer range, yet the final 3 is exact. Converting -10 from binary to hexadecimal produces -2 rather than a fixed-width pattern of f digits.' },
+    },
+  },
+  D12: {
+    details: [
+      {
+        title: { zh: '以八位 RGB 作为中间表示', en: 'Eight-bit RGB as the intermediate form' },
+        paragraphs: [{ zh: 'HEX 的每两位对应一个 0–255 通道，三位写法通过重复每一位扩展，例如 #abc 成为 #aabbcc。RGB 输入直接读取三个通道；HSL 输入则先把色相环归一到 0–360°，按所在的六个扇区求色度和中间分量，再加入亮度偏移。最终通道取整，所以任意小数 HSL 往返一次可能有轻微差异，并不是所有表示都能保持原始小数位。', en: 'Each HEX byte is a 0–255 channel; short HEX duplicates each digit, turning #abc into #aabbcc. RGB supplies channels directly. HSL normalizes hue to 0–360°, computes chroma and intermediate components in six hue sectors, then applies the lightness offset. Final channels are rounded, so arbitrary fractional HSL values can change slightly on a round trip.' }],
+      },
+      {
+        title: { zh: 'sRGB 需要先线性化', en: 'sRGB must be linearized first' },
+        paragraphs: [{ zh: '屏幕 RGB 数值不是光强的线性比例，不能直接把三个通道平均当作可读性。工具先将通道归一到 0–1，再按 WCAG 的分段公式线性化；随后以 0.2126、0.7152、0.0722 权重组合红、绿、蓝，得到相对亮度。绿色权重大于蓝色，反映的是该标准的亮度模型，不是对色彩偏好的主观判断。下式是代码采用的计算公式。', en: 'Display RGB values are not linear light intensities, so averaging raw channels is not a readability measure. Channels are normalized to 0–1 and linearized with the WCAG piecewise formula, then combined using red, green and blue weights 0.2126, 0.7152 and 0.0722. The larger green weight belongs to the standard luminance model, not a subjective color preference. The formula below is used by the code.' }],
+        code: { zh: 'c ≤ 0.04045：c_linear = c / 12.92\n否则：c_linear = ((c + 0.055) / 1.055)^2.4\nL = 0.2126R + 0.7152G + 0.0722B\ncontrast = (max(L1,L2)+0.05)/(min(L1,L2)+0.05)', en: 'c ≤ 0.04045: c_linear = c / 12.92\nOtherwise: c_linear = ((c + 0.055) / 1.055)^2.4\nL = 0.2126R + 0.7152G + 0.0722B\ncontrast = (max(L1,L2)+0.05)/(min(L1,L2)+0.05)' },
+      },
+      {
+        title: { zh: '判定门槛与显示舍入', en: 'Thresholds and display rounding' },
+        paragraphs: [{ zh: 'AA 与 AAA 使用普通文字的 4.5:1 和 7:1 门槛，判断基于未格式化的比值；界面显示才保留两位小数，所以临界值不要只凭显示数字推断。当前没有 alpha 合成步骤，也不分析字号、字重、图片背景或页面其他元素。颜色解析只接受工具列出的不透明语法，得到高对比度不能推导出整页已经满足全部无障碍要求。', en: 'AA and AAA use normal-text thresholds of 4.5:1 and 7:1, checked before display rounding. The UI shows two decimals, so borderline pass/fail should not be inferred from the rounded number alone. There is no alpha compositing or analysis of text size, weight, image backgrounds or other page elements. A high ratio for accepted opaque colors does not establish full-page accessibility.' }],
+      },
+    ],
+    example: {
+      input: { zh: '颜色：#000\n背景色：#fff', en: 'Color: #000\nBackground: #fff' },
+      output: { zh: 'hex: #000000\nrgb: rgb(0, 0, 0)\nhsl: hsl(0, 0%, 0%)\n对比度: 21.00:1\nAA 普通文字（≥4.5）: ✓\nAAA 普通文字（≥7）: ✓', en: 'hex: #000000\nrgb: rgb(0, 0, 0)\nhsl: hsl(0, 0%, 0%)\nContrast: 21.00:1\nAA normal text (≥4.5): ✓\nAAA normal text (≥7): ✓' },
+      explanation: { zh: '黑色亮度为 0，白色为 1，公式得到 1.05÷0.05=21。这是该不透明 sRGB 模型中的最高对比度，两个普通文字门槛都通过。', en: 'Black has luminance 0 and white 1, giving 1.05÷0.05=21, the maximum contrast in this opaque sRGB model. Both normal-text thresholds pass.' },
+    },
+  },
+  D13: {
+    details: [
+      {
+        title: { zh: '格式转换先经过数据结构', en: 'Conversion passes through a data structure' },
+        paragraphs: [{ zh: '工具不会通过替换冒号和括号把 JSON 变成 YAML。JSON 由 lossless-json 解析，递归把普通整数转换成 BigInt，再交给 yaml 序列化。反方向先构建 YAML 文档节点，使用核心类型、唯一键检查和 intAsBigInt，再转换为 JavaScript 结构。返回 JSON 前把 BigInt 包回 LosslessNumber，所以普通大整数不经过 Number 这条会舍入的路径。', en: 'Conversion does not replace colons and brackets textually. lossless-json parses JSON, plain integers are recursively converted to BigInt, and yaml serializes them. The reverse path creates YAML document nodes with core types, unique-key checking and intAsBigInt, then converts to JavaScript structures. BigInt is wrapped back into LosslessNumber before JSON output, keeping plain large integers away from Number rounding.' }],
+      },
+      {
+        title: { zh: '检查原始数值，而非已经舍入的结果', en: 'Check original scalars, not rounded results' },
+        paragraphs: [{ zh: '小数或指数写法不能仅凭解析后的数值判断是否安全：9007199254740993e0 一旦变成 Number 就已经失真。工具检查原始标量文本，规范化 YAML 的 +、.5、1. 等写法，再用 lossless-json 的安全数值检查确认十进制往返不会丢失有效数字；这不要求 0.1 在二进制中有限展开。溢出、下溢、过多有效位及 .inf/.nan 会明确报错，而不是静默变成 null。', en: 'Safety cannot be determined solely after parsing a decimal or exponent value: 9007199254740993e0 is already changed once it becomes Number. The tool checks original scalar text, normalizes YAML forms such as +, .5 and 1., then uses lossless-json’s safe-number check for decimal round-trip precision. This does not require 0.1 to have a finite binary expansion. Overflow, underflow, excess significant digits and .inf/.nan produce errors instead of silent nulls.' }],
+      },
+      {
+        title: { zh: '别名、循环与格式信息损失', en: 'Aliases, cycles and formatting information' },
+        paragraphs: [{ zh: 'YAML 的注释、锚点名称和排版不是 JSON 数据模型的一部分，因此结构转换不会完整保留这些写法。toJS() 设置 maxAliasCount: 100 限制别名扩展，随后用当前递归路径的 WeakSet 检测循环引用：共享但非循环的数据可复制成 JSON，真正回指祖先则拒绝。输入长度受限仍不等于复杂结构没有额外开销，尤其是深层递归和别名展开。', en: 'YAML comments, anchor names and layout are outside JSON’s data model and do not fully survive structural conversion. toJS() uses maxAliasCount: 100 to bound alias expansion, followed by a path-local WeakSet cycle check. Shared acyclic data can be duplicated into JSON, while references back to ancestors are rejected. Input length alone does not eliminate structural costs such as deep recursion and alias expansion.' }],
+        code: { zh: '简化类型路径：\nJSON 整数文本 → BigInt → YAML 整数\nYAML 整数 → BigInt → LosslessNumber → JSON\n不安全小数/指数 → 报错，不静默舍入', en: 'Simplified type paths:\nJSON integer text → BigInt → YAML integer\nYAML integer → BigInt → LosslessNumber → JSON\nUnsafe decimal/exponent → error, not silent rounding' },
+      },
+    ],
+    example: {
+      input: { zh: '方向：JSON → YAML\n{"n":9007199254740993,"enabled":true}', en: 'Direction: JSON → YAML\n{"n":9007199254740993,"enabled":true}' },
+      output: { zh: 'n: 9007199254740993\nenabled: true\n', en: 'n: 9007199254740993\nenabled: true\n' },
+      explanation: { zh: '大整数和布尔值都保留数据类型，YAML 输出末尾有换行。若将数字改写成 9007199254740993e0，当前实现会报告无法保留精度；可使用普通整数写法或明确选择字符串。', en: 'The large integer and boolean retain their data types, and YAML output ends with a newline. Writing the number as 9007199254740993e0 instead triggers a precision error in this implementation; use a plain integer or explicitly choose a string.' },
+    },
+  },
+  D14: {
+    details: [
+      {
+        title: { zh: '词法识别为什么依赖方言', en: 'Why tokenization depends on dialect' },
+        paragraphs: [{ zh: 'SQL 中相同符号可能在不同数据库里有不同意义，例如标识符引用、字符串规则和特有操作符。工具把所选 language 传给 sql-formatter，由库负责词法识别和结构化排版。字符串内部的 select 不应被当作关键字改写；注释和带引号内容也必须与语句结构分开处理。因此用简单正则给每个逗号或关键字加换行，很容易破坏原来的文字。', en: 'SQL symbols can have different meanings across databases, including identifier quoting, string rules and dialect-specific operators. The selected language is passed to sql-formatter for tokenization and structural layout. A select inside a string must not be rewritten as a keyword, and comments and quoted content must be distinguished from statement structure. Simple regex-based newline insertion can easily corrupt that content.' }],
+      },
+      {
+        title: { zh: '固定的排版配置', en: 'The concrete formatting configuration' },
+        paragraphs: [{ zh: '本工具设置 keywordCase: upper，使识别出的关键字使用大写，tabWidth: 2 控制每级缩进宽度。SELECT 列表、FROM、WHERE 和嵌套表达式如何拆行则交给库当前版本的格式规则，不承诺与某个数据库客户端逐字符一致。结果只是新的 SQL 文本，没有创建数据库连接或调用执行器。下面列出的配置对应实际调用，不是数据库查询代码。', en: 'keywordCase: upper uppercases recognized keywords, and tabWidth: 2 sets indentation width. The current library decides wrapping for SELECT lists, FROM, WHERE and nested expressions; output is not promised to match a particular database client character for character. The result is text, with no connection or executor created. The configuration below reflects the actual formatter call, not a database query.' }],
+        code: { zh: 'format(input, {\n  language: selectedDialect,\n  keywordCase: "upper",\n  tabWidth: 2\n})', en: 'format(input, {\n  language: selectedDialect,\n  keywordCase: "upper",\n  tabWidth: 2\n})' },
+      },
+      {
+        title: { zh: '格式错误与执行错误是两回事', en: 'Formatting errors versus execution errors' },
+        paragraphs: [{ zh: '格式化器遇到不支持的语法可能直接抛错，也可能输出某种排版；无论哪一种，都不能证明表名存在、列类型兼容或查询逻辑正确。选错方言会改变库对输入的理解。输入最多 20 万代码单元，按需加载能减少首次打开其他工具的资源，但实际格式化仍在当前页面执行；大型复杂语句可能比普通短查询耗时更多。', en: 'Unsupported syntax may cause a formatter error or still receive a layout; neither outcome proves that tables exist, types are compatible or query logic is correct. Choosing the wrong dialect changes how the library interprets input. Input is capped at 200,000 code units. Lazy loading avoids loading the formatter for unrelated tools, but formatting still runs in the page and large complex statements can cost more than short queries.' }],
+      },
+    ],
+    example: {
+      input: { zh: 'SQL 方言：SQL\nselect id from users where id=1', en: 'Dialect: SQL\nselect id from users where id=1' },
+      output: { zh: 'SELECT\n  id\nFROM\n  users\nWHERE\n  id = 1', en: 'SELECT\n  id\nFROM\n  users\nWHERE\n  id = 1' },
+      explanation: { zh: '关键字变为大写，字段、表名和条件按库规则缩进，等号两侧补空格。这个输出不会查询 users 表，也不证明该表或 id 字段存在。', en: 'Keywords become uppercase, fields, tables and conditions follow the library’s indentation, and spaces appear around the equals sign. Nothing queries users or establishes that the table or id column exists.' },
+    },
+  },
+  D15: {
+    details: [
+      {
+        title: { zh: '五个字段如何组成日历约束', en: 'How five fields constrain the calendar' },
+        paragraphs: [{ zh: '工具先按空白分隔并确认恰好五段，再由 cron-parser 解释取值、列表、区间和步长。字段依次为分、时、日、月、星期，星期日可写 0 或 7。不能把“每隔几小时”和“某些小时值命中”混为一谈：例如 */2 表示该字段中的步进取值。当前解析库在日与星期都受限制时采用命中任意一个的规则，不是强制两者同时满足。', en: 'The tool first checks for exactly five whitespace-separated fields, then cron-parser interprets values, lists, ranges and steps. The order is minute, hour, day of month, month and weekday, with Sunday as 0 or 7. A field such as */2 selects stepped values rather than measuring an interval since the last run. When day of month and weekday are both restricted, this parser uses an either-match rule rather than requiring both.' }],
+      },
+      {
+        title: { zh: '说明文字与日期计算分工', en: 'Separate description and date engines' },
+        paragraphs: [{ zh: 'cronstrue 把同一表达式转换成中英文说明，cron-parser 创建带 tz 和 currentDate 的迭代器，连续调用 next() 五次取后续时间。Luxon 最后把每个结果按指定时区输出为含 UTC 偏移的 ISO 日期。说明库并不负责真正求下一次日期，因此判断精确触发时间时应看日期列表，不能只从一句自然语言说明推测所有日历细节。', en: 'cronstrue creates the Chinese or English description. cron-parser builds an iterator with tz and currentDate, and five next() calls obtain future runs. Luxon then formats each date in the requested zone with its UTC offset. The description library does not calculate trigger dates, so precise scheduling details should be read from the date list rather than inferred from one natural-language sentence.' }],
+        code: { zh: '实际调用的简化流程：\ncron = parse(expression, {tz, currentDate})\n重复 5 次：\n  date = cron.next().toDate()\n  输出 date 在 tz 中的 ISO 表示', en: 'Simplified actual flow:\ncron = parse(expression, {tz, currentDate})\nRepeat 5 times:\n  date = cron.next().toDate()\n  output date as zoned ISO in tz' },
+      },
+      {
+        title: { zh: '时区规则和可复现性', en: 'Zone rules and reproducibility' },
+        paragraphs: [{ zh: '“每天九点”约束的是当地钟表时间，跨夏令时的相邻两次运行不一定相隔 24 小时。不存在或重复的时段由解析器和时区数据处理，不能假定所有调度系统行为相同。界面每次从当时的当前时间计算，结果会随执行时刻改变；这里没有后台计时器，也不会真的运行任务。为了复现示例，下方显式固定了推算参考时刻，这不是新增表单选项。', en: '“Daily at nine” constrains local clock time, so adjacent runs across DST need not be 24 hours apart. Gaps and overlaps follow parser and zone-data rules, which can differ between schedulers. The UI calculates from the current time on each run, so results change over time; there is no background scheduler. The example fixes a reference instant for reproducibility, not as an additional form option.' }],
+      },
+    ],
+    example: {
+      input: { zh: '表达式：0 9 * * *\n时区：Asia/Shanghai\n示例参考时刻：2026-01-01T00:00:00Z', en: 'Expression: 0 9 * * *\nZone: Asia/Shanghai\nExample reference instant: 2026-01-01T00:00:00Z' },
+      output: { zh: '后续运行时间：\n2026-01-01T09:00:00.000+08:00\n2026-01-02T09:00:00.000+08:00\n2026-01-03T09:00:00.000+08:00\n2026-01-04T09:00:00.000+08:00\n2026-01-05T09:00:00.000+08:00', en: 'Next runs:\n2026-01-01T09:00:00.000+08:00\n2026-01-02T09:00:00.000+08:00\n2026-01-03T09:00:00.000+08:00\n2026-01-04T09:00:00.000+08:00\n2026-01-05T09:00:00.000+08:00' },
+      explanation: { zh: '参考时刻在上海是当日 08:00，所以下一次是当天 09:00。实际页面从你点击执行的时刻开始推算，日期列表通常不会与这个固定示例相同。', en: 'The reference instant is 08:00 in Shanghai, so the next run is 09:00 that same day. The live page starts from the time you run it, so its dates will generally differ from this fixed example.' },
+    },
+  },
+  D16: {
+    details: [
+      {
+        title: { zh: '字符引用不是 HTML 标签解析', en: 'Character references are not HTML parsing' },
+        paragraphs: [{ zh: 'HTML 实体是字符的另一种写法：命名形式如 &amp;，十进制数字形式如 &#38;，十六进制形式如 &#x26; 都能指向同一个与号。工具调用 he 库识别和生成这些引用，而不是把输入装进一个 DOM 来读取 innerHTML。编码优先使用命名实体，也会根据库的字符规则生成数字引用；普通 Unicode 字符与实体之间的转换并不改变网页结构本身。', en: 'HTML references are alternate spellings of characters: &amp;, &#38; and &#x26; can all represent an ampersand. The tool uses he to recognize and generate them rather than loading input into a DOM and reading innerHTML. Encoding prefers named references and may use numeric ones according to library rules. Converting characters and references does not itself parse a page structure.' }],
+      },
+      {
+        title: { zh: '编码选项和单次解码', en: 'Encoding options and one decoding pass' },
+        paragraphs: [{ zh: 'encode() 设置 useNamedReferences: true、allowUnsafeSymbols: false、encodeEverything: false，既处理尖括号、与号、引号，也遵循库对其他字符的编码策略。decode() 执行一次实体还原，不反复解码到字符串不再变化；例如 &amp;lt; 一次后仍是 &lt;。缺分号等边界写法如何解释由 he 的默认 HTML 解码规则决定，不能把它当成严格的 XML 校验器。', en: 'encode() uses useNamedReferences: true, allowUnsafeSymbols: false and encodeEverything: false, handling brackets, ampersands, quotes and other characters according to the library’s policy. decode() performs one pass rather than decoding repeatedly until stable; &amp;lt; becomes &lt; after one pass. Edge forms such as missing semicolons follow he’s default HTML rules, not strict XML validation.' }],
+        code: { zh: '单次解码示例：\n&amp;lt; → &lt;\n&lt; → <\n这些是两次独立调用，不是一次循环解码。', en: 'Single-pass decoding examples:\n&amp;lt; → &lt;\n&lt; → <\nThese are separate calls, not one repeated decoding loop.' },
+      },
+      {
+        title: { zh: '展示安全与内容净化的区别', en: 'Safe display versus sanitization' },
+        paragraphs: [{ zh: '解码可能恢复出真实的 <script> 或带事件属性的标签字符串，但结果区使用 textContent，因此这些字符只作为文字展示。这个展示策略不代表输出已经净化：若在另一个应用中直接把解码结果交给 innerHTML，仍可能改变 DOM 或执行危险内容。实体编码也只是一种上下文相关的表示处理，不等同于 JavaScript、URL 或 CSS 各自需要的转义。', en: 'Decoding can restore strings containing real <script> tags or event attributes, but the result area uses textContent so they remain visible text. That display policy is not sanitization: inserting the same decoded output through innerHTML elsewhere can still modify a DOM or create dangerous content. Entity encoding is context-specific and is not a substitute for JavaScript, URL or CSS escaping.' }],
+      },
+    ],
+    example: {
+      input: { zh: '操作：编码\n<a title="x">&', en: 'Mode: Encode\n<a title="x">&' },
+      output: { zh: '&lt;a title=&quot;x&quot;&gt;&amp;', en: '&lt;a title=&quot;x&quot;&gt;&amp;' },
+      explanation: { zh: '尖括号、引号和与号被写成实体，其余 ASCII 字符保留。把这份输出解码一次得到原输入，结果仍以纯文本显示，不会创建 a 元素。', en: 'Angle brackets, quotes and the ampersand become references, while the remaining ASCII stays literal. Decoding once restores the input as plain text without creating an a element.' },
+    },
+  },
+});
+
+for (const [id, technical] of Object.entries(technicalTextDetails)) {
+  Object.assign(textPrinciples[id], technical);
+}

@@ -6,11 +6,19 @@ if(dialog&&opener&&closer){
   opener.addEventListener('click',()=>{
     if(dialog.open)return;
     dialog.showModal();
+    closer.focus({preventScroll:true});
     dialog.scrollTop=0;
     opener.setAttribute('aria-expanded','true');
     document.body.classList.add('principles-visible');
   });
   closer.addEventListener('click',()=>dialog.close());
+  for(const button of dialog.querySelectorAll('[data-principle-jump]'))button.addEventListener('click',()=>{
+    const heading=document.getElementById(button.dataset.principleJump);
+    if(!heading||!dialog.contains(heading))return;
+    heading.focus({preventScroll:true});
+    const header=dialog.querySelector('.principles-header');
+    dialog.scrollTop+=heading.getBoundingClientRect().top-dialog.getBoundingClientRect().top-header.offsetHeight-20;
+  });
   dialog.addEventListener('close',()=>{
     opener.setAttribute('aria-expanded','false');
     document.body.classList.remove('principles-visible');
