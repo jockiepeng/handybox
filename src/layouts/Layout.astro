@@ -9,7 +9,7 @@ const base=import.meta.env.BASE_URL.replace(/\/$/,'');
 <head>
   <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>{title} · HandyBox</title>
-  <meta name="description" content="百宝匣 HandyBox：30 个本地运行的开发、图片、文本与文件工具。无需注册，中英文切换。"/>
+  <meta name="description" content={`百宝匣 HandyBox：${tools.length} 个本地运行的开发、图片、文本与文件工具。无需注册，中英文切换。`}/>
   <meta name="color-scheme" content="light dark"/>
   <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`}/>
   <script is:inline>try{const t=JSON.parse(localStorage.getItem('handybox-theme')||'"system"');document.documentElement.dataset.theme=t==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):t;document.documentElement.lang=JSON.parse(localStorage.getItem('handybox-language')||'"zh"')==='en'?'en':'zh-CN';}catch{}</script>
@@ -27,7 +27,7 @@ const base=import.meta.env.BASE_URL.replace(/\/$/,'');
   <div class="app-layout">
     <aside class="sidebar" aria-label="工具分类">
       <nav class="category-nav" aria-label="Categories">
-        <a href={`${base}/`} data-category-link="all" class:list={['nav-item',{'active':!tool}]}><span class="nav-symbol">▦</span><span data-zh="全部工具" data-en="All tools">全部工具</span><span class="nav-count">30</span></a>
+        <a href={`${base}/`} data-category-link="all" class:list={['nav-item',{'active':!tool}]}><span class="nav-symbol">▦</span><span data-zh="全部工具" data-en="All tools">全部工具</span><span class="nav-count">{tools.length}</span></a>
         <a href={`${base}/?view=favorites`} data-category-link="favorites" class="nav-item"><span class="nav-symbol">☆</span><span data-zh="我的收藏" data-en="Favorites">我的收藏</span><span class="nav-count" id="favorites-count">0</span></a>
         <span class="nav-heading" data-zh="工具分类" data-en="Categories">工具分类</span>
         {categories.map(c=><a href={`${base}/?category=${c.id}`} data-category-link={c.id} class:list={['nav-item',{'active':tool?.category===c.id}]}><span class="nav-symbol">{c.icon}</span><span data-zh={c.zh} data-en={c.en}>{c.zh}</span><span class="nav-count">{tools.filter(t=>t.category===c.id).length}</span></a>)}

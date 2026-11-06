@@ -29,7 +29,7 @@ const errorTranslations=[
 ];
 function errorText(error){const en=error?.message||String(error);return [errorTranslations.find(([re])=>re.test(en))?.[1]||'处理失败，请检查文件和选项。',en];}
 
-async function decodeImage(file){
+export async function decodeImage(file){
   if(file.size>LIMITS.fileBytes)throw new Error('Image exceeds limit: 25 MiB');
   const header=inspectImage(await file.arrayBuffer());
   let image;

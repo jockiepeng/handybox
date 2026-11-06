@@ -7,6 +7,7 @@ import {deflateSync} from 'node:zlib';
 import {chromium} from 'playwright';
 import {PDFDocument} from 'pdf-lib';
 import {tools} from '../src/data/tools.mjs';
+import {checkPlayful} from './playful-browser.mjs';
 
 // Run after `npm run build`. No dev server, network service, or test fixture download is needed.
 const root=resolve(fileURLToPath(new URL('..',import.meta.url))),dist=resolve(root,'dist');
@@ -145,8 +146,8 @@ try{
   });
 
   await step('catalog, cross-language search, keyboard shortcut and favorites',async()=>{
-    await page.goto(home);assert.equal(await page.locator('#tool-catalog [data-card]').count(),30);
-    assert.equal(new Set(await page.locator('#tool-catalog .card-link').evaluateAll(nodes=>nodes.map(n=>n.href))).size,30);
+    await page.goto(home);assert.equal(await page.locator('#tool-catalog [data-card]').count(),33);
+    assert.equal(new Set(await page.locator('#tool-catalog .card-link').evaluateAll(nodes=>nodes.map(n=>n.href))).size,33);
     await page.screenshot({path:resolve(screenshots,'desktop-home.png'),fullPage:true});
     await page.locator('#language-toggle').click();assert.equal(await page.locator('html').getAttribute('lang'),'en');
     for(const [query,id] of [['图片压缩','I01'],['BASE64','D03'],['二维码','T04'],['metadata','I05']]){
@@ -154,7 +155,7 @@ try{
     }
     await page.locator('#tool-search').fill('no-such-tool-923');assert.ok(await page.locator('#empty-state').isVisible());
     await page.keyboard.press('Control+k');assert.equal(await page.locator('#tool-search').evaluate(n=>n===document.activeElement),true);
-    await page.keyboard.press('Escape');assert.equal(await page.locator('#tool-catalog [data-card]:visible').count(),30);
+    await page.keyboard.press('Escape');assert.equal(await page.locator('#tool-catalog [data-card]:visible').count(),33);
     await page.locator('#tool-catalog [data-favorite=D01]').click();
     await page.locator('[data-category-link=favorites]').click();assert.equal(await page.locator('#tool-catalog [data-card]:visible').count(),1);
     await page.reload();assert.equal(await page.locator('#tool-catalog [data-favorite=D01]').getAttribute('aria-pressed'),'true');
@@ -189,7 +190,7 @@ try{
     T07:async()=>{await field('zone').fill('UTC');await field('input').fill('2026-01-01T12:00');await field('end').fill('2026-01-03T12:00');await field('days').fill('7');const text=await run();assert.match(text,/Calendar day difference: 2\b/);assert.match(text,/Elapsed hours: 48\b/);assert.match(text,/Elapsed seconds: 172800\b/);assert.match(text,/2026-01-08T12:00/);await field('zone').fill('Bad/Zone');await run(true);},
     F01:async()=>{await field('input').fill('name,note\n中,"Hello, world"\nB,"two\nlines"');assert.deepEqual(JSON.parse(await run()),[{name:'中',note:'Hello, world'},{name:'B',note:'two\nlines'}]);await field('input').fill('a,a\n1,2');await run(true);},
   };
-  for(const tool of tools.filter(t=>!t.id.startsWith('I')&&t.id!=='F02'))await step(`${tool.id} ${tool.en}: example and independent result`,async()=>{
+  for(const tool of tools.filter(t=>Object.hasOwn(cases,t.id)))await step(`${tool.id} ${tool.en}: example and independent result`,async()=>{
     await openTool(tool.id);await action('example').click();await run();
     assert.ok((await output()).length>0||await page.locator('.text-preview>*').count()>0,'Example produced no result');
     await cases[tool.id]();
@@ -207,7 +208,7 @@ try{
   const mediaRun=async()=>{await action('run').click();await page.waitForFunction(()=>!document.querySelector('#workbench [data-action=run]')?.disabled);assert.notEqual(await page.locator('.media-status').getAttribute('data-kind'),'error',await page.locator('.media-status').textContent());};
   const waitImage=async()=>{await page.locator('.media-preview:not([hidden])').waitFor();await page.waitForFunction(()=>!document.querySelector('#workbench [data-action=run]')?.disabled);};
   const imagePixels=async bytes=>page.evaluate(async base64=>{const blob=await(await fetch('data:image/png;base64,'+base64)).blob(),img=await createImageBitmap(blob),c=document.createElement('canvas');c.width=img.width;c.height=img.height;const ctx=c.getContext('2d');ctx.drawImage(img,0,0);const result={width:c.width,height:c.height,corner:[...ctx.getImageData(0,0,1,1).data],center:[...ctx.getImageData(Math.floor(c.width/2),Math.floor(c.height/2),1,1).data],pixels:[...ctx.getImageData(0,0,c.width,c.height).data]};img.close();return result;},bytes.toString('base64'));
-  for(const tool of tools.filter(t=>t.id.startsWith('I')))await step(`${tool.id} ${tool.en}: example, real upload and download`,async()=>{
+  for(const tool of tools.filter(t=>t.id.startsWith('I')&&t.id!=='I06'))await step(`${tool.id} ${tool.en}: example, real upload and download`,async()=>{
     await openTool(tool.id);await action('example').click();await waitImage();await mediaRun();assert.ok(await page.locator('.media-result').count()>0);
     await page.locator('[name=images]').setInputFiles(imageFile);await waitImage();
     if(tool.id==='I05'){
@@ -226,6 +227,7 @@ try{
     }
     await page.locator('[name=images]').setInputFiles({name:'broken.png',mimeType:'image/png',buffer:Buffer.from('invalid image')});await page.waitForFunction(()=>document.querySelector('.media-status')?.dataset.kind==='error');
   });
+  await checkPlayful({step,page,openTool,action,download,imageFile,imagePixels,noOverflow,screenshots,resolve});
   await step('F02 PDF example, actual merge, reordered duplicate pages, split and invalid ranges',async()=>{
     await openTool('F02');await action('example').click();await page.locator('.media-files li').waitFor();await mediaRun();let saved=await download(page.locator('.media-result [data-action=download]').first());assert.equal((await PDFDocument.load(saved.bytes)).getPageCount(),3);
     await page.locator('[name=pdfs]').setInputFiles([pdfFile,pdfFile2]);await page.locator('[name=mode]').selectOption('merge');await mediaRun();saved=await download(page.locator('.media-result [data-action=download]'));assert.equal(saved.bytes.subarray(0,5).toString(),'%PDF-');assert.deepEqual((await PDFDocument.load(saved.bytes)).getPages().map(p=>p.getWidth()),[111,222,333,444]);
